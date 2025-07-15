@@ -704,8 +704,7 @@ class ReadResult:
         self.selector = None  # 模型选择器
         self.time_dataset_path = None  # 处理后的时序数据集保存路径
         # 检查 .identify 文件
-        identify_version, identify_time, identify_path = check_result_identify(folder)
-        assert os.path.samefile(identify_path, self.result_dir), ".identify 文件路径与读取的目录不一致！"
+        check_result_identify(folder)
         # 读取 package.pkl 文件
         package_path = os.path.join(self.result_dir, 'data', 'package.pkl')
         if os.path.isfile(package_path):
@@ -942,7 +941,7 @@ class PackageDataset:
     def __init__(self, dataset, train_start, train_end, valid_start, valid_end, test_start, test_end, train_batch_size,
                  eval_batch_size, sample_gap, k_fold, shuffle, time_step, output_size):
         """
-        封装数据集
+        封装数据集。
         :param dataset: 实例后的 ReadDataset。
         :param train_start: 训练集起始索引比例（浮点数）。
         :param train_end: 训练集结束索引比例（浮点数）。

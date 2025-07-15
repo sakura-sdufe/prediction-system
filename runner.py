@@ -69,7 +69,7 @@ class Runner:
             self.save_dir = os.path.join(current_dir, self.parameter_data['SaveResultDir'].strip(r'./\\'))
         self.writer = Writer(self.save_dir, is_delete=self.parameter_data['DeleteDir'])  # Writer 类，用于保存结果
         # 处理数据
-        self.weights = None  # 时间步权重
+        self.weights, self.weights_train = None, None  # 时间步权重 和 训练时间步权重
         self.train_target, self.valid_target, self.test_target = None, None, None
         self.train_persistence, self.valid_persistence, self.test_persistence = None, None, None  # Persistence 预测结果
         self.train_average, self.valid_average, self.test_average = None, None, None  # Average 集成预测结果
@@ -163,7 +163,8 @@ class Runner:
         self.writer.add_text("成功完成 数据集封装！", filename="Logs", folder="documents", suffix="log")
         # 处理 weights 参数
         if self.parameter_data['Weights'] is not None:
-            self.weights = [w/len(self.package.target_variables) for w in self.parameter_data['Weights'] for _ in range(len(self.package.target_variables))]
+            self.weights = list(self.parameter_data['Weights'])
+            self.weights_train = [w/len(self.package.target_variables) for w in self.weights for _ in range(len(self.package.target_variables))]
         self.writer.write_file(self.package, filename="package", folder="data")  # 将数据集写入 data 目录下
         self.package.write_data(writer=self.writer)
         self.parameter.write_parameter(writer=self.writer)
@@ -310,9 +311,9 @@ class Runner:
             train_parameters['loss_title'] = f"{predictor.__name__} 模型 {criterion.__name__} 损失值"
         # 生成保存路径参数
         if need_save:
-            model_dir = os.path.join(self.save_dir, 'models', predictor.__name__)
-            figure_dir = os.path.join(self.save_dir, 'figures', predictor.__name__)
-            result_dir = os.path.join(self.save_dir, 'results', predictor.__name__)
+            model_dir = os.path.join(self.save_dir, 'models', predictor.__name__)  # type: ignore
+            figure_dir = os.path.join(self.save_dir, 'figures', predictor.__name__)  # type: ignore
+            result_dir = os.path.join(self.save_dir, 'results', predictor.__name__)  # type: ignore
             if not os.path.exists(model_dir):
                 os.makedirs(model_dir)
             if not os.path.exists(figure_dir):
@@ -320,12 +321,24 @@ class Runner:
             if not os.path.exists(result_dir):
                 os.makedirs(result_dir)
             train_parameters['best_model_dir'] = model_dir
-            train_parameters['loss_figure_path'] = os.path.join(figure_dir, predictor.__name__+'损失值曲线.'+figure_type)
-            train_parameters['monitor_figure_path'] = os.path.join(figure_dir, predictor.__name__+'监视值曲线.'+figure_type)
-            train_parameters['loss_result_path'] = os.path.join(result_dir, predictor.__name__+'损失值.csv')
-            train_parameters['monitor_result_path'] = os.path.join(result_dir, predictor.__name__+'监视值.csv')
-            train_parameters['lr_sec_path'] = os.path.join(result_dir, predictor.__name__+'学习率与每秒样本数.csv')
+            train_parameters['loss_figure_path'] = os.path.join(figure_dir, predictor.__name__+'损失值曲线.'+figure_type)  # type: ignore
+            train_parameters['monitor_figure_path'] = os.path.join(figure_dir, predictor.__name__+'监视值曲线.'+figure_type)  # type: ignore
+            train_parameters['loss_result_path'] = os.path.join(result_dir, predictor.__name__+'损失值.csv')  # type: ignore
+            train_parameters['monitor_result_path'] = os.path.join(result_dir, predictor.__name__+'监视值.csv')  # type: ignore
+            train_parameters['lr_sec_path'] = os.path.join(result_dir, predictor.__name__+'学习率与每秒样本数.csv')  # type: ignore
         return model_parameters, optim_parameters, train_parameters
+
+    def write_criterion_monitor(self, criterion_instance, monitor_instance):
+        if hasattr(criterion_instance, 'get_parameters'):  # 将损失函数和损失函数参数写入日志
+            criterion_info = f"损失函数为：{criterion_instance.__class__.__name__}；损失函数的参数为：{criterion_instance.get_parameters()}。"
+        else:
+            criterion_info = f"损失函数为：{criterion_instance.__class__.__name__}。"
+        self.writer.add_text(criterion_info, filename="Logs", folder="documents", suffix="log", end='')
+        if hasattr(monitor_instance, 'get_parameters'):  # 将监视器和监视器参数写入日志
+            monitor_info = f"监视器为：{monitor_instance.__class__.__name__}；监视器的参数为：{monitor_instance.get_parameters()}。"
+        else:
+            monitor_info = f"监视器为：{monitor_instance.__class__.__name__}。"
+        self.writer.add_text(monitor_info, filename="Logs", folder="documents", suffix="log", end='')
 
     def DL_fold(self, predictor, parameters: Dict, is_normalization:bool, criterion, monitor, dtype=np.float32, **kwargs):
         """
@@ -371,6 +384,7 @@ class Runner:
             model = predictor(**model_parameters)  # 重置模型
             criterion_instance = criterion(weights=optim_parameters['weights'])  # 重置损失函数
             monitor_instance = monitor(weights=optim_parameters['weights'])  # 重置监视器
+            self.write_criterion_monitor(criterion_instance, monitor_instance)
             optimizer = optim.Adam(model.parameters(), lr=optim_parameters['learning_rate'],
                                    weight_decay=optim_parameters['weight_decay'])
             scheduler = optim.lr_scheduler.ReduceLROnPlateau(
@@ -410,7 +424,7 @@ class Runner:
         """
         cprint("\n" + "*" * 105 + f"\n正在执行 {predictor.__name__} 模型在所有训练数据上训练和预测...\n" + "*" * 105, text_color='蓝色')
         self.writer.add_text(f"执行 {predictor.__name__} 模型在所有训练数据上训练和预测。",
-                             filename="Logs", folder="documents", suffix="log", save_mode="a+")
+                             filename="Logs", folder="documents", suffix="log")
         # 更新训练参数 train_parameters（保存训练结果）
         model_parameters, optim_parameters, train_parameters = self._DL_parameter(
             predictor, parameters, criterion=criterion, monitor=monitor, need_save=True, **kwargs
@@ -419,6 +433,8 @@ class Runner:
         model = predictor(**model_parameters)  # 重置模型
         criterion_instance = criterion(weights=optim_parameters['weights'])  # 重置损失函数
         monitor_instance = monitor(weights=optim_parameters['weights'])  # 重置监视器
+        self.write_criterion_monitor(criterion_instance, monitor_instance)
+        self.writer.add_text("", end='', filename="Logs", folder="documents", suffix="log", save_mode='a+')  # 换行
         optimizer = optim.Adam(model.parameters(), lr=optim_parameters['learning_rate'],
                                weight_decay=optim_parameters['weight_decay'])
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
@@ -516,12 +532,13 @@ class Runner:
             all_parameters.update(self.parameter_model['Train'])  # 添加训练参数
             fold_predict = self.DL_fold(
                 predictor, all_parameters, is_normalization=is_normalization, criterion=criterion, monitor=monitor,
-                dtype=dtype, weights=self.weights, figure_type=self.parameter_data['FigureType']
+                dtype=dtype, weights=self.weights_train, figure_type=self.parameter_data['FigureType']
             )
             trained_model, predict_values = self.DL_all(
                 predictor, all_parameters, is_normalization=is_normalization, criterion=criterion, monitor=monitor,
-                dtype=dtype, weights=self.weights, figure_type=self.parameter_data['FigureType']
+                dtype=dtype, weights=self.weights_train, figure_type=self.parameter_data['FigureType']
             )
+
         else:
             raise ValueError("模型类必须是 sklearn.base.BaseEstimator 或 torch.nn.Module 的子类！")
         train_predict, valid_predict, test_predict = predict_values
@@ -539,6 +556,7 @@ class Runner:
         cprint(f"{predictor_name} 模型训练和预测结束，用时 {end_time - start_time} 秒。", text_color="白色")
         self.writer.add_text(f"{predictor_name} 模型训练和预测结束，用时 {(end_time - start_time):.2f} 秒。",
                              filename="Logs", folder="documents", suffix="log", save_mode='a+')
+        # 返回训练后的模型
         return trained_model
 
     def metrics_show_save(self, predictor_name, fold_predict, train_predict, valid_predict, test_predict,
@@ -566,23 +584,30 @@ class Runner:
             train_metrics_temp = calculate_metrics(self.train_target[[col_name]], train_predict[[col_name]])
             valid_metrics_temp = calculate_metrics(self.valid_target[[col_name]], valid_predict[[col_name]])
             test_metrics_temp = calculate_metrics(self.test_target[[col_name]], test_predict[[col_name]])
-            fold_metrics_sub.append({'target': target_name, 'step': target_step, **fold_metrics_temp})
-            train_metrics_sub.append({'target': target_name, 'step': target_step, **train_metrics_temp})
-            valid_metrics_sub.append({'target': target_name, 'step': target_step, **valid_metrics_temp})
-            test_metrics_sub.append({'target': target_name, 'step': target_step, **test_metrics_temp})
-        fold_metrics_sub = pd.DataFrame(fold_metrics_sub, index=[predictor_name] * len(fold_metrics_sub))
-        train_metrics_sub = pd.DataFrame(train_metrics_sub, index=[predictor_name] * len(train_metrics_sub))
-        valid_metrics_sub = pd.DataFrame(valid_metrics_sub, index=[predictor_name] * len(valid_metrics_sub))
-        test_metrics_sub = pd.DataFrame(test_metrics_sub, index=[predictor_name] * len(test_metrics_sub))
+            fold_metrics_sub.append({'target': target_name, 'model': predictor_name, 'step': target_step, **fold_metrics_temp})
+            train_metrics_sub.append({'target': target_name, 'model': predictor_name, 'step': target_step, **train_metrics_temp})
+            valid_metrics_sub.append({'target': target_name, 'model': predictor_name, 'step': target_step, **valid_metrics_temp})
+            test_metrics_sub.append({'target': target_name, 'model': predictor_name, 'step': target_step, **test_metrics_temp})
+        fold_metrics_sub = pd.DataFrame(fold_metrics_sub, index=range(len(fold_metrics_sub)))
+        train_metrics_sub = pd.DataFrame(train_metrics_sub, index=range(len(train_metrics_sub)))
+        valid_metrics_sub = pd.DataFrame(valid_metrics_sub, index=range(len(valid_metrics_sub)))
+        test_metrics_sub = pd.DataFrame(test_metrics_sub, index=range(len(test_metrics_sub)))
         # 计算整体评估指标
-        fold_metrics = calculate_metrics(self.train_target, fold_predict, weights=self.weights)
-        train_metrics = calculate_metrics(self.train_target, train_predict, weights=self.weights)
-        valid_metrics = calculate_metrics(self.valid_target, valid_predict, weights=self.weights)
-        test_metrics = calculate_metrics(self.test_target, test_predict, weights=self.weights)
-        fold_metrics = pd.DataFrame(fold_metrics, index=[predictor_name])
-        train_metrics = pd.DataFrame(train_metrics, index=[predictor_name])
-        valid_metrics = pd.DataFrame(valid_metrics, index=[predictor_name])
-        test_metrics = pd.DataFrame(test_metrics, index=[predictor_name])
+        fold_metrics, train_metrics, valid_metrics, test_metrics = [], [], [], []
+        for target_name in self.package.target_variables:
+            col_name = [c for c in self.package.target_columns if re.match(f"^{target_name}_-\d+", c)]
+            fold_metrics_temp = calculate_metrics(self.train_target[col_name], fold_predict[col_name], weights=self.weights)
+            train_metrics_temp = calculate_metrics(self.train_target[col_name], train_predict[col_name], weights=self.weights)
+            valid_metrics_temp = calculate_metrics(self.valid_target[col_name], valid_predict[col_name], weights=self.weights)
+            test_metrics_temp = calculate_metrics(self.test_target[col_name], test_predict[col_name], weights=self.weights)
+            fold_metrics.append({'target': target_name, 'model': predictor_name, **fold_metrics_temp})
+            train_metrics.append({'target': target_name, 'model': predictor_name, **train_metrics_temp})
+            valid_metrics.append({'target': target_name, 'model': predictor_name, **valid_metrics_temp})
+            test_metrics.append({'target': target_name, 'model': predictor_name, **test_metrics_temp})
+        fold_metrics = pd.DataFrame(fold_metrics, index=range(len(fold_metrics)))
+        train_metrics = pd.DataFrame(train_metrics, index=range(len(train_metrics)))
+        valid_metrics = pd.DataFrame(valid_metrics, index=range(len(valid_metrics)))
+        test_metrics = pd.DataFrame(test_metrics, index=range(len(test_metrics)))
         # 绘制和保存预测图像（分目标）
         if show_figure or save_figure:
             for target_name in self.package.target_variables:
@@ -641,17 +666,25 @@ class Runner:
             self.package.write_predict(writer=self.writer, value=valid_predict, model=predictor_name, dataset='valid')
             self.package.write_predict(writer=self.writer, value=test_predict, model=predictor_name, dataset='test')
             # 保存评估指标
-            self.writer.add_df(fold_metrics, axis=0, filename="fold metrics", folder="results", suffix="xlsx")
-            self.writer.add_df(train_metrics, axis=0, filename="train metrics", folder="results", suffix="xlsx")
-            self.writer.add_df(valid_metrics, axis=0, filename="valid metrics", folder="results", suffix="xlsx")
-            self.writer.add_df(test_metrics, axis=0, filename="test metrics", folder="results", suffix="xlsx")
-            self.writer.add_df(fold_metrics_sub, axis=0, filename="fold metrics (detailed)", folder="results", suffix="xlsx")
-            self.writer.add_df(train_metrics_sub, axis=0, filename="train metrics (detailed)", folder="results", suffix="xlsx")
-            self.writer.add_df(valid_metrics_sub, axis=0, filename="valid metrics (detailed)", folder="results", suffix="xlsx")
-            self.writer.add_df(test_metrics_sub, axis=0, filename="test metrics (detailed)", folder="results", suffix="xlsx")
+            self.writer.add_df(fold_metrics, axis=0, filename="fold metrics", folder="results", suffix="xlsx",
+                               reset_index=True, reset_drop=True, sort_list=['target', 'model'], sort_ascending=True)
+            self.writer.add_df(train_metrics, axis=0, filename="train metrics", folder="results", suffix="xlsx",
+                               reset_index=True, reset_drop=True, sort_list=['target', 'model'], sort_ascending=True)
+            self.writer.add_df(valid_metrics, axis=0, filename="valid metrics", folder="results", suffix="xlsx",
+                               reset_index=True, reset_drop=True, sort_list=['target', 'model'], sort_ascending=True)
+            self.writer.add_df(test_metrics, axis=0, filename="test metrics", folder="results", suffix="xlsx",
+                               reset_index=True, reset_drop=True, sort_list=['target', 'model'], sort_ascending=True)
+            self.writer.add_df(fold_metrics_sub, axis=0, filename="fold metrics (detailed)", folder="results", suffix="xlsx",
+                               reset_index=True, reset_drop=True, sort_list=['target', 'model', 'step'], sort_ascending=True)
+            self.writer.add_df(train_metrics_sub, axis=0, filename="train metrics (detailed)", folder="results", suffix="xlsx",
+                               reset_index=True, reset_drop=True, sort_list=['target', 'model', 'step'], sort_ascending=True)
+            self.writer.add_df(valid_metrics_sub, axis=0, filename="valid metrics (detailed)", folder="results", suffix="xlsx",
+                               reset_index=True, reset_drop=True, sort_list=['target', 'model', 'step'], sort_ascending=True)
+            self.writer.add_df(test_metrics_sub, axis=0, filename="test metrics (detailed)", folder="results", suffix="xlsx",
+                               reset_index=True, reset_drop=True, sort_list=['target', 'model', 'step'], sort_ascending=True)
 
     def all_models(self, predictors: Union[List,Tuple], *, is_normalization:Union[List,Tuple,bool]=True, save_result=True,
-                   save_figure=True, show_result=True, show_figure=False, criterion=None, monitor=None, dtype=np.float32) -> List:
+                   save_figure=True, show_result=True, show_figure=False, criterion=None, monitor=None, dtype=np.float32) -> None:
         """
         训练和预测多个模型，并保存结果和评估指标。
         :param predictors: 由模型类构成的 list 或 tuple，不需要实例化。
@@ -664,16 +697,16 @@ class Runner:
         :param criterion: 深度学习损失函数类，无需实例化，深度学习必须参数。
         :param monitor: 深度学习模型监视器类，无需实例化，深度学习必须参数。
         :param dtype: 预测结果数据类型，默认为 np.float32。
-        :return: 由训练后模型构成的列表。
+        :return: None
         """
         if isinstance(is_normalization, bool):
             is_normalization = [is_normalization] * len(predictors)
-        trained_models = []
         for m, is_norm in zip(predictors, is_normalization):
             try:  # 运行时发生错误，忽略该模型，继续运行
-                m = self.model(m, is_normalization=is_norm, save_result=save_result, save_figure=save_figure,
-                  show_result=show_result, show_figure=show_figure, criterion=criterion, monitor=monitor, dtype=dtype)
-                trained_models.append(m)
+                self.model(
+                    m, is_normalization=is_norm, save_result=save_result, save_figure=save_figure,
+                    show_result=show_result, show_figure=show_figure, criterion=criterion, monitor=monitor, dtype=dtype
+                )
             except BaseException:
                 error_message = traceback.format_exc()
                 self.error_number += 1  # 错误数量加 1
@@ -687,7 +720,6 @@ class Runner:
                 info = f'\n{m.__name__} 训练时发生错误，错误信息已经保存到日志，请到日志中查看！已忽略该模型的训练，开始训练下一个模型！\n'
                 cprint("-" * 100 + info + '-' * 100 + '\n', text_color='红色', background_color='浅黄色', style='加粗')
                 continue
-        return trained_models
 
     def persistence(self, save_result=True, save_figure=True, show_result=True, show_figure=False, dtype=np.float32):
         """
@@ -778,8 +810,7 @@ class Runner:
 
     def run(self, predictors: Union[type,List,Tuple], *, is_normalization:Union[bool,List,Tuple]=True,
             add_persistence=True, add_average=True, save_result=True, save_figure=True, show_result=True,
-            show_figure=False, criterion=None, monitor=None, dtype=np.float32) \
-            -> Union[type,List]:
+            show_figure=False, criterion=None, monitor=None, dtype=np.float32):
         """
         训练和预测一个或者多个模型，并保存结果和评估指标。
         :param predictors: 传入一个模型类，或者是由模型类构成的 list 或 tuple，不需要实例化。
@@ -797,6 +828,12 @@ class Runner:
         :return: 由训练后模型构成的列表。
         """
         cache_dir = os.path.join(os.getcwd(), '.cache predictor')
+        # 删除缓存目录
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
+            self.writer.add_text(
+                f"缓存目录 {cache_dir} 删除成功！", filename="Logs", folder="documents", suffix="log", save_mode='a+'
+            )
         try:
             # 运行 Persistence 模型和 Average 集成模型
             if add_persistence:
@@ -805,12 +842,12 @@ class Runner:
                 self.average()
             # 运行用户自定义模型
             if isinstance(predictors, (list, tuple)):
-                trained_model = self.all_models(
+                self.all_models(
                     predictors, is_normalization=is_normalization, save_result=save_result, save_figure=save_figure,
                     show_result=show_result, show_figure=show_figure, criterion=criterion, monitor=monitor, dtype=dtype
                 )
             elif isinstance(predictors, type):
-                trained_model = self.model(
+                self.model(
                     predictors, is_normalization=is_normalization, save_result=save_result, save_figure=save_figure,
                     show_result=show_result, show_figure=show_figure, criterion=criterion, monitor=monitor, dtype=dtype
                 )
@@ -830,7 +867,7 @@ class Runner:
                 info = f'所有训练任务结束，系统运行时未发生错误！'
             cprint("-" * 100 + f"\n{info}\n" + '-' * 100 + '\n', text_color='红色', background_color='青色', style='加粗')
             self.writer.add_text(info, filename="Logs", folder="documents", suffix="log", save_mode="a+")
-            return trained_model
+
         except BaseException as e:
             error_message = traceback.format_exc()
             self.writer.add_text(

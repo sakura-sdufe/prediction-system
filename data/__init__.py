@@ -11,7 +11,7 @@
 """
 
 from .scaler import Norm
-from .read import ReadDataset, ReadResult, ReadParameter, PackageDataset
+from .read import check_result_identify, ReadDataset, ReadResult, ReadParameter, PackageDataset
 
 
-__all__ = ['Norm', 'ReadDataset', 'ReadResult', 'ReadParameter', 'PackageDataset']
+__all__ = ['Norm', 'check_result_identify', 'ReadDataset', 'ReadResult', 'ReadParameter', 'PackageDataset']

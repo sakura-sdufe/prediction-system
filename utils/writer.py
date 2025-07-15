@@ -16,6 +16,7 @@ import traceback
 import matplotlib
 import numpy as np
 import pandas as pd
+from typing import Union
 from copy import deepcopy
 from datetime import datetime
 from matplotlib import rcParams
@@ -97,7 +98,8 @@ class Writer:
             print(f"根目录 '{self.save_dir}' 删除成功！")
 
 
-    def add_df(self, data_df, axis=0, filename=None, folder=None, suffix='csv', save_mode='none'):
+    def add_df(self, data_df, axis=0, filename=None, folder=None, suffix='csv', save_mode='none',
+               reset_index=False, reset_drop=False, sort_list: Union[str, list]=None, sort_ascending: Union[bool, list]=True):
         """
         添加数据到 self.storage_df 中。
         :param data_df: pd.DataFrame 类型，需要添加的数据。
@@ -106,6 +108,10 @@ class Writer:
         :param folder: 保存文件所在的文件夹名称，如果为 None，则保存到根目录下。
         :param suffix: 保存文件的文件后缀名，默认为 'csv'。可接受的后缀名有：'csv', 'xlsx', 'xls'。
         :param save_mode: 保存模式。如果为 'none' 表示暂存不写入文件。如果为 'w+'，即覆盖写入。如果为 'a+'，则为追加写入。
+        :param reset_index: 是否重置索引，默认为 False。如果为 True，则在拼接时重置索引。
+        :param reset_drop: 是否删除原有索引，默认为 False。如果为 True，则在重置索引时删除原有索引。（仅在 reset_index=True 时生效）
+        :param sort_list: 是否对 DataFrame 进行列升序排序。传入一个 可迭代对象，按照优先级对可迭代对象中每个元素进行排序。
+        :param sort_ascending: 是否对 DataFrame 进行列升序排序，默认为 True。如果为 False，则为降序排序。（仅在 sort_list 不为 None 时生效）
         Note: 如果确定之前没暂存过相同 os.path.join(folder, filename+'.'+suffix) 的数据，并且本地没有该文件，可以选择不传入 axis 参数；
             否则强烈建议每次都手动传入 axis 参数。
         :return: None
@@ -121,9 +127,16 @@ class Writer:
             filepath = os.path.join(self.save_dir, folder, filename + '.' + suffix)
         # 暂存数据
         if filepath not in self.storage_df:
-            self.storage_df[filepath] = (axis, data_df)
+            new_df = data_df
         else:
-            self.storage_df[filepath] = (axis, pd.concat([self.storage_df[filepath][1], data_df], axis=axis))
+            new_df = pd.concat([self.storage_df[filepath][1], data_df], axis=axis)
+        if sort_list:  # 对 DataFrame 进行列升序排序
+            sort_list = sort_list if isinstance(sort_list, list) else [sort_list,]
+            sort_ascending = [sort_ascending,] * len(sort_list) if isinstance(sort_ascending, bool) else sort_ascending
+            new_df = new_df.sort_values(by=sort_list, ascending=sort_ascending)
+        if reset_index:  # 重置索引
+            new_df.reset_index(drop=reset_drop, inplace=True)
+        self.storage_df[filepath] = (axis, new_df)
         # 写入数据
         if save_mode in ['w+', 'a+']:
             write_df(filepath, self.storage_df[filepath][1], axis=axis, save_mode=save_mode)

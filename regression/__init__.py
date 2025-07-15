@@ -16,10 +16,10 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, A
 
 from .mlp import MLP
 from .cnn import C2L
-from .attention import CAttn, CAttnProj
+from .attention import CAttn, CAttnProj, AttnProj
 
 
 ml_model = ['SVR', 'Ridge', 'RandomForestRegressor', 'GradientBoostingRegressor', 'AdaBoostRegressor', 'BaggingRegressor']
-dl_model = ['MLP', 'CAttn', 'CAttnProj', 'C2L']
+dl_model = ['MLP', 'CAttn', 'CAttnProj', 'AttnProj', 'C2L']
 
 __all__ = ml_model + dl_model

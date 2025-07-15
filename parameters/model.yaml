@@ -99,6 +99,14 @@ CAttnProj:
  bias: True  # 多头注意力机制是否使用偏置项，默认为 True。
  activation: relu  # 激活函数，默认为 relu。可选值为 relu、gelu、silu。
 
+# AttnProj 模型参数
+AttnProj:
+ project_size: 256
+ feedforward: 2048
+ dropout: 0.1
+ bias: True
+ activation: relu
+
 ## C2L 模型参数
 #C2L:
 # activation: relu

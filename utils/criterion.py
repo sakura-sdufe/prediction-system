@@ -38,11 +38,21 @@ def weights_to_tensor(weights) -> Union[None, torch.Tensor]:
     return weights
 
 
+def check_data(inputs: Tensor, targets: Tensor) -> None:
+    """检查输入和目标数据的类型和形状"""
+    assert isinstance(inputs, Tensor) and inputs.ndim == 2, f"参数 input 的数据类型为 {type(inputs)}，但应为 torch.Tensor，且维度为 2！"
+    assert isinstance(targets, Tensor) and targets.ndim == 2, f"参数 target 的数据类型为 {type(targets)}，但应为 torch.Tensor，且维度为 2！"
+    assert inputs.shape == targets.shape, f"参数 input 的尺寸为 {inputs.shape}，但参数 target 的尺寸为 {targets.shape}，请保持一致！"
+
+
 class Huber_loss(nn.HuberLoss):
     def __init__(self, weights=None):
         self.delta = 1.0  # Huber 损失函数的 delta 参数，控制损失函数的平滑程度。
         super(Huber_loss, self).__init__(reduction='none', delta=self.delta)
         self.weights = weights_to_tensor(weights)
+
+    def get_parameters(self):
+        return {'delta': self.delta, 'weights': self.weights}
 
     def forward(self, inputs:Tensor, targets:Tensor) -> Tensor:
         """
@@ -51,9 +61,7 @@ class Huber_loss(nn.HuberLoss):
         :param targets: 预测值，数据类型为 torch.Tensor，形状为 [batch_size, output_size]。
         :return: 损失值，数据类型为 torch.Tensor，形状为 [1]。
         """
-        assert isinstance(inputs, Tensor) and inputs.ndim == 2, f"参数 input 的数据类型为 {type(inputs)}，但应为 torch.Tensor，且维度为 2！"
-        assert isinstance(targets, Tensor) and targets.ndim == 2, f"参数 target 的数据类型为 {type(targets)}，但应为 torch.Tensor，且维度为 2！"
-        assert inputs.shape == targets.shape, f"参数 input 的尺寸为 {inputs.shape}，但参数 target 的尺寸为 {targets.shape}，请保持一致！"
+        check_data(inputs=inputs, targets=targets)  # 检查数据类型和形状
         if self.weights is None:
             self.weights = torch.ones(inputs.shape[-1], dtype=torch.float32) / inputs.shape[-1]  # 初始化一次
         if self.weights.device != inputs.device:
@@ -70,6 +78,9 @@ class MSELoss(nn.MSELoss):
         self.power = 1.0
         self.weights = weights_to_tensor(weights=weights)
 
+    def get_parameters(self):
+        return {'scale': self.scale, 'power': self.power, 'weights': self.weights}
+
     def forward(self, inputs:Tensor, targets:Tensor) -> Tensor:
         """
         向前计算
@@ -77,9 +88,7 @@ class MSELoss(nn.MSELoss):
         :param targets: 预测值，数据类型为 torch.Tensor，形状为 [batch_size, output_size]。
         :return: 损失值，数据类型为 torch.Tensor，形状为 [1]。
         """
-        assert isinstance(inputs, Tensor) and inputs.ndim == 2, f"参数 input 的数据类型为 {type(inputs)}，但应为 torch.Tensor，且维度为 2！"
-        assert isinstance(targets, Tensor) and targets.ndim == 2, f"参数 target 的数据类型为 {type(targets)}，但应为 torch.Tensor，且维度为 2！"
-        assert inputs.shape == targets.shape, f"参数 input 的尺寸为 {inputs.shape}，但参数 target 的尺寸为 {targets.shape}，请保持一致！"
+        check_data(inputs=inputs, targets=targets)  # 检查数据类型和形状
         if self.weights is None:
             self.weights = torch.ones(inputs.shape[-1], dtype=torch.float32) / inputs.shape[-1]  # 初始化一次
         if self.weights.device != inputs.device:
@@ -92,11 +101,42 @@ class MSELoss(nn.MSELoss):
         return loss_value
 
 
+class MAELoss(nn.L1Loss):
+    def __init__(self, weights=None):
+        super(MAELoss, self).__init__(reduction='none')
+        self.weights = weights_to_tensor(weights=weights)
+
+    def get_parameters(self):
+        return {'weights': self.weights}
+
+    def forward(self, inputs: Tensor, target: Tensor) -> Tensor:
+        """
+        向前计算
+        :param inputs: 预测值，数据类型为 torch.Tensor，形状为 [batch_size, output_size]。
+        :param target: 预测值，数据类型为 torch.Tensor，形状为 [batch_size, output_size]。
+        :return: 损失值，数据类型为 torch.Tensor，形状为 [1]。
+        """
+        check_data(inputs=inputs, targets=target)  # 检查数据类型和形状
+        if self.weights is None:
+            self.weights = torch.ones(inputs.shape[-1], dtype=torch.float32) / inputs.shape[-1]  # 初始化一次
+        if self.weights.device != inputs.device:
+            self.weights = self.weights.to(device=inputs.device)  # 转到指定设备
+        # 计算损失值
+        mae_func = super(MAELoss, self).forward
+        loss_value = torch.sum(
+            mae_func(inputs, target).mean(dim=0) * self.weights
+        )
+        return loss_value
+
+
 class sMAPELoss(nn.Module):
     def __init__(self, weights=None):
         super(sMAPELoss, self).__init__()
         self.epsilon = 1e-6  # 防止分母为 0
         self.weights = weights_to_tensor(weights)
+
+    def get_parameters(self):
+        return {'epsilon': self.epsilon, 'weights': self.weights}
 
     def forward(self, inputs:Tensor, targets:Tensor) -> Tensor:
         """
@@ -105,9 +145,7 @@ class sMAPELoss(nn.Module):
         :param targets: 预测值，数据类型为 torch.Tensor，形状为 [batch_size, output_size]。
         :return: 损失值，数据类型为 torch.Tensor，形状为 [1]。
         """
-        assert isinstance(inputs, Tensor) and inputs.ndim == 2, f"参数 input 的数据类型为 {type(inputs)}，但应为 torch.Tensor，且维度为 2！"
-        assert isinstance(targets, Tensor) and targets.ndim == 2, f"参数 target 的数据类型为 {type(targets)}，但应为 torch.Tensor，且维度为 2！"
-        assert inputs.shape == targets.shape, f"参数 input 的尺寸为 {inputs.shape}，但参数 target 的尺寸为 {targets.shape}，请保持一致！"
+        check_data(inputs=inputs, targets=targets)  # 检查数据类型和形状
         if self.weights is None:
             self.weights = torch.ones(inputs.shape[-1], dtype=torch.float32) / inputs.shape[-1]  # 初始化一次
         if self.weights.device != inputs.device:
@@ -126,6 +164,9 @@ class MAPELoss(nn.Module):
         self.epsilon = 1e-6  # 防止分母为 0
         self.weights = weights_to_tensor(weights)
 
+    def get_parameters(self):
+        return {'epsilon': self.epsilon, 'weights': self.weights}
+
     def forward(self, inputs:Tensor, targets:Tensor) -> Tensor:
         """
         向前计算
@@ -133,9 +174,7 @@ class MAPELoss(nn.Module):
         :param targets: 预测值，数据类型为 torch.Tensor，形状为 [batch_size, output_size]。
         :return: 损失值，数据类型为 torch.Tensor，形状为 [1]。
         """
-        assert isinstance(inputs, Tensor) and inputs.ndim == 2, f"参数 input 的数据类型为 {type(inputs)}，但应为 torch.Tensor，且维度为 2！"
-        assert isinstance(targets, Tensor) and targets.ndim == 2, f"参数 target 的数据类型为 {type(targets)}，但应为 torch.Tensor，且维度为 2！"
-        assert inputs.shape == targets.shape, f"参数 input 的尺寸为 {inputs.shape}，但参数 target 的尺寸为 {targets.shape}，请保持一致！"
+        check_data(inputs=inputs, targets=targets)  # 检查数据类型和形状
         if self.weights is None:
             self.weights = torch.ones(inputs.shape[-1], dtype=torch.float32) / inputs.shape[-1]  # 初始化一次
         if self.weights.device != inputs.device:
@@ -152,9 +191,12 @@ class QuantileLoss(nn.Module):
     def __init__(self, weights=None):
         """分位数损失函数"""
         super(QuantileLoss, self).__init__()
-        self.tau = 0.5  # 分位数参数，取值范围为 [0, 1]。
+        self.tau = 0.10  # 分位数参数，取值范围为 [0, 1]。
         assert 0 <= self.tau <= 1, f"分位数参数 tau 的取值范围为 [0, 1]，但实际为 {self.tau}！"
         self.weights = weights_to_tensor(weights)
+
+    def get_parameters(self):
+        return {'tau': self.tau, 'weights': self.weights}
 
     def forward(self, inputs:Tensor, targets:Tensor) -> Tensor:
         """
@@ -163,9 +205,7 @@ class QuantileLoss(nn.Module):
         :param targets: 预测值，数据类型为 torch.Tensor，形状为 [batch_size, output_size]。
         :return: 损失值，数据类型为 torch.Tensor，形状为 [1]。
         """
-        assert isinstance(inputs, Tensor) and inputs.ndim == 2, f"参数 input 的数据类型为 {type(inputs)}，但应为 torch.Tensor，且维度为 2！"
-        assert isinstance(targets, Tensor) and targets.ndim == 2, f"参数 target 的数据类型为 {type(targets)}，但应为 torch.Tensor，且维度为 2！"
-        assert inputs.shape == targets.shape, f"参数 input 的尺寸为 {inputs.shape}，但参数 target 的尺寸为 {targets.shape}，请保持一致！"
+        check_data(inputs=inputs, targets=targets)  # 检查数据类型和形状
         if self.weights is None:
             self.weights = torch.ones(inputs.shape[-1], dtype=torch.float32) / inputs.shape[-1]  # 初始化一次
         if self.weights.device != inputs.device:

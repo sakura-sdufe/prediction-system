@@ -19,14 +19,7 @@ from sklearn.metrics import mean_squared_log_error, median_absolute_error, max_e
 
 def convert_to_numpy(data):
     # 转换数据类型
-    if isinstance(data, (pd.Series, pd.DataFrame)):
-        data = data.to_numpy()
-    elif isinstance(data, list):
-        data = np.array(data)
-    elif isinstance(data, np.ndarray):
-        pass
-    else:
-        raise ValueError("转换类型失败！")
+    data = np.asarray(data)  # 转换为 numpy 数组
     data = data.astype(float)  # 转换为 float 类型
     # 转换为 2 维
     if data.ndim == 1:
@@ -150,50 +143,36 @@ def R2(true_value, predict_value, weights):
 def calculate_metrics(true_value, predict_value, metrics=None, weights=None):
     """
     计算评价指标。
-    :param true_value: 真实值。支持 Series，DataFrame，numpy.ndarray，list。
-    :param predict_value: 预测值。支持 Series，DataFrame，numpy.ndarray，list。
-    :param metrics: 评价指标。支持 "MSE"，"RMSE"，"MAE"，"MAPE"，"SMAPE"，"MSLE"，"MedAE"，"MaxError"，"MBE"，"RAE"，"RSE"，"RMSLE"，"Huber"，"R2"。
-    :param weights: 不同列（不同输出）的评价指标占比。如果为 None，则表示所有列的评价指标占比一致。支持 list 和 1维 np.ndarray
+    :param true_value: 真实值。支持 Series, DataFrame, numpy.ndarray, list。
+    :param predict_value: 预测值。支持 Series, DataFrame, numpy.ndarray, list。
+    :param metrics: 评价指标。支持 "MSE", "RMSE", "MAE", "MAPE", "SMAPE", "MSLE", "MedAE", "MaxError", "MBE", "RAE", "RSE", "RMSLE", "Huber", "R2"。
+    :param weights: 不同列（不同输出）的评价指标占比。如果为 None，则表示所有列的评价指标占比一致。支持 list 和 1 维 np.ndarray。
     :return: 以字典的形式返回评价指标值。
     Note:
-        1. true_value 和 predict_value 类型最高支持 2 维（不建议传入 1 维数据，可能会引起歧义）
+        1. true_value 和 predict_value 必须具有相同的形状，最高支持 2 维（不建议传入 1 维数据，可能会引起歧义）
         2. 如果需要添加新的评价指标，那么输入的 true_value 和 predict_value 均为 2D ndarray，且行数和列数均相同。
     """
     if metrics is None:
         metrics = ["MSE", "RMSE", "MAE", "MAPE", "SMAPE", "MSLE", "RMSLE", "MedAE", "MaxError", "RAE", "RSE", "Huber", "R2"]
     if isinstance(true_value, pd.DataFrame) and isinstance(predict_value, pd.DataFrame):
-        assert predict_value.shape == true_value.shape, "输入的真实值和预测值的尺寸不匹配！"
-        predict_value = predict_value[true_value.columns]  # 保证预测值和真实值的列名一致
+        # predict_value = predict_value[true_value.columns]  # 保证预测值和真实值的列名一致（上一版本）
+        assert true_value.columns.equals(predict_value.columns), "实际值和预测值的列名不一致！"  # （当前版本，未验证）
     true_value = convert_to_numpy(true_value)  # 转换为 numpy 数组，并设置为 float 类型
     predict_value = convert_to_numpy(predict_value)  # 转换为 numpy 数组，并设置为 float 类型
-
     assert true_value.shape == predict_value.shape, "输入的真实值尺寸和预测值尺寸不匹配！"
+
     if weights is None:
-        weights = [1/true_value.shape[1]] * true_value.shape[1]
+        weights = [1 / true_value.shape[1]] * true_value.shape[1]
     weights = weights_to_ndarray(weights)  # 将权重转为1维数组
     assert true_value.shape[1] == len(weights), f"权重个数为 {len(weights)} 与输出个数 {true_value.shape[1]} 不匹配！"
 
-    metrics_function = {
-        "MSE": MSE,
-        "RMSE": RMSE,
-        "MAE": MAE,
-        "MAPE": MAPE,
-        "SMAPE": SMAPE,
-        "MSLE": MSLE,
-        "RMSLE": RMSLE,
-        "MedAE": MedAE,
-        "MaxError": MaxError,
-        "RAE": RAE,
-        "RSE": RSE,
-        "Huber": Huber,
-        "R2": R2,
-    }
-
+    metrics_function = {m: eval(m) for m in metrics}  # 获取评价指标函数
     metrics_result = {}
-    for metric in metrics:
-        if metric in metrics_function.keys():
-            metrics_result[metric] = metrics_function[metric](true_value, predict_value, weights)
-        else:
-            raise ValueError(f"不支持的评价指标：{metric}！")
-
+    for m, func in metrics_function.items():
+        metrics_result[m] = func(true_value=true_value, predict_value=predict_value, weights=weights)
+    # for metric in metrics:
+    #     if metric in metrics_function.keys():
+    #         metrics_result[metric] = metrics_function[metric](true_value, predict_value, weights)
+    #     else:
+    #         raise ValueError(f"不支持的评价指标：{metric}！")
     return metrics_result

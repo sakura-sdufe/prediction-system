@@ -5,7 +5,7 @@ EnsembleMethod: Stacking  # 集成学习方法。可选值为 null（不进行�
 # ----------------------------------------------------------------------------------------------------
 # 保存结果参数
 DeleteDir: True  # 是否删除保存结果的目录。如果为 True，那么删除该目录下的所有文件；如果为 False，那么在原目录下追加结果（更新识别文件）
-SaveResultDir: .\\results\\Ensemble(Small, No Feature)  # 保存结果的目录
+SaveResultDir: .\\results\\Ensemble(Compare, alpha=0.10)  # 保存结果的目录
 FigureType: png  # 保存结果的图片格式，默认为 png。
 Target: [Power]  # 目标变量，即要预测的变量（支持多个目标）
 
@@ -23,7 +23,7 @@ SampleGap: 2  # 采样间隔，数据类型为 int。默认为 1，表示连续�
 Shuffle: True  # 是否打乱数据集顺序。True 表示打乱，False 表示不打乱。该参数只在训练模式上生效，在评估模式上为 False。
 TrainBatchSize: 128  # 训练批次大小，数据类型为 int。默认为 64，表示每个批次包含 64 个样本。
 EvalBatchSize: 4096  # 推理批次大小，数据类型为 int。评估模式下训练集、验证集、测试集批量大小（较大的批可以拥有更快的推理速度）。
-KFold: 5  # KFold 的折数（交叉验证的折数），应当大于等于 2。一般设置为 5 或者 10，折数越多资源消耗越大。
+KFold: 3  # KFold 的折数（交叉验证的折数），应当大于等于 2。一般设置为 5 或者 10，折数越多资源消耗越大。
 
 
 # ----------------------------------------------------------------------------------------------------
@@ -50,9 +50,9 @@ FeatureSelectionHow: outer  # 多个目标变量特征选择方式，可选值�
 # ----------------------------------------------------------------------------------------------------
 # 仅影响集成学习器（由于涉及特征对齐，所以训练集缺少前 time_step + output_size - 1 个样本，测试集缺少后 output_size - 1 个样本）
 # ----------------------------------------------------------------------------------------------------
-ReadResultDir: .\\results\\Prediction  # 基学习器保存结果的目录，读取该目录下的模型结果
-Feature: []  # 参与集成的时序特征变量，默认为 null（使用 TimeUnknown 和 TimeKnown 所有的特征）；如果设置为 []，表示不添加任何原特征。
-Model: [SVR, GradientBoostingRegressor, AdaBoostRegressor, Ridge, RandomForestRegressor, BaggingRegressor, MLP, RNN, LSTM, GRU]  # 参与集成的模型，默认为 null（使用所有的时序模型）
-ModelSelectionMethod: 相关系数  # 模型选择方法。可选值为 null、统计筛选方法（互信息、F检验、卡方检验、相关系数）、指标筛选方法（在 metrics.metrics 中定义的指标）
-ModelSelectionNumber: 3  # 特征选择后特征的数量（单个目标的选择数量），如果 ModelSelectionMethod 设置为 null，则该参数无效。
+ReadResultDir: .\\results\\Prediction(Base)  # 基学习器保存结果的目录，读取该目录下的模型结果
+Feature: null  # 参与集成的时序特征变量，默认为 null（使用 TimeUnknown 和 TimeKnown 所有的特征）；如果设置为 []，表示不添加任何原特征。
+Model: null  # 参与集成的模型，默认为 null（使用所有的时序模型）
+ModelSelectionMethod: F检验  # 模型选择方法。可选值为 null、统计筛选方法（互信息、F检验、卡方检验、相关系数）、指标筛选方法（在 metrics.metrics 中定义的指标）
+ModelSelectionNumber: 4  # 特征选择后特征的数量（单个目标的选择数量），如果 ModelSelectionMethod 设置为 null，则该参数无效。
 ModelSelectionHow: outer  # 多个目标变量模型选择方式，可选值：inner（多个目标变量选择的模型取交集）、outer（多个目标变量选择的模型取并集）

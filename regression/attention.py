@@ -116,3 +116,41 @@ class CAttnProj(BaseRegression):
         attn_output = self.activation(attn_output + X)  # shape: [batch_size, project_size]
         output = self.output_project(attn_output)  # shape: [batch_size, output_size]
         return output
+
+
+class AttnProj(BaseRegression):
+    def __init__(self, input_size, output_size, *, project_size=256, feedforward=2048, dropout=0.1, bias=True, activation='relu'):
+        """
+        具有高维映射的 Attention 模型。注意：这个过程无时序性，也没有位置编码，因此不能用于预测。
+        :param input_size: 输入的维度。
+        :param output_size: 输出的维度。
+        :param project_size: 参与注意力计算的特征维度。
+        :param feedforward: 前馈神经网络的隐藏层维度。
+        :param dropout: dropout 概率。默认值为 0.1。
+        :param bias: 多头注意力是否使用偏置。默认值为 True。
+        :param activation: 激活函数。默认值为 'relu'，可选值 'relu', 'gelu'。
+        """
+        super(AttnProj, self).__init__()
+        self.attn_weight = None  # 保存注意力权重
+        self.activation = get_activation_fn(activation)  # 激活函数
+
+        self.input_project = nn.Linear(input_size, project_size)  # 将特征维度映射到嵌入维度
+        self.attention = nn.MultiheadAttention(embed_dim=1, num_heads=1, dropout=dropout, bias=bias)  # 注意力机制
+        self.output_project = nn.Sequential(
+            nn.Linear(project_size, feedforward),
+            get_activation_nn(activation),
+            nn.Linear(feedforward, output_size),
+        )  # 将特征维度映射到输出层维度层
+
+    def forward(self, X):
+        """
+        前向传播
+        :param X: 输入张量，维度为 [batch_size, input_size]。
+        :return: 输出张量，维度为 [batch_size, output_size]。
+        """
+        X = self.activation(self.input_project(X))  # shape: [batch_size, project_size]
+        X_attn = X.permute(1, 0).unsqueeze(-1)  # shape: [project_size, batch_size, 1] <==> [L, N, E]
+        attn_output, self.attn_weight = self.attention(X_attn, X_attn, X_attn)  # shape: [project_size, batch_size, 1]
+        attn_output = self.activation(attn_output.squeeze(-1).permute(1, 0) + X)  # shape: [batch_size, project_size]
+        output = self.output_project(attn_output)  # shape: [batch_size, output_size]
+        return output
