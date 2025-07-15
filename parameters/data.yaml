@@ -1,0 +1,58 @@
+EnsembleMethod: Stacking  # 集成学习方法。可选值为 null（不进行集成，此时训练基学习器）、Stacking（在输出结果的基础上添加原始特征进行集成）
+
+# ----------------------------------------------------------------------------------------------------
+# 既影响基学习器，也影响集成学习器
+# ----------------------------------------------------------------------------------------------------
+# 保存结果参数
+DeleteDir: True  # 是否删除保存结果的目录。如果为 True，那么删除该目录下的所有文件；如果为 False，那么在原目录下追加结果（更新识别文件）
+SaveResultDir: .\\results\\Ensemble(Compare, alpha=0.10)  # 保存结果的目录
+FigureType: png  # 保存结果的图片格式，默认为 png。
+Target: [Power]  # 目标变量，即要预测的变量（支持多个目标）
+
+# 数据集封装参数
+TimeStep: 10  # 时间步长（使用多少时间步的数据进行预测）
+OutputSize: 1  # 预测时间步（输出多少时间步的预测数据，OutputSize 应当小于 TimeStep）
+Weights: null  # 不同预测时间步的损失和评价权重（为不同预测时间步分配不同的评价指标权重占比和深度学习模型的损失函数权重占比，要求列表长度等于 OutputSize，数据类型为 list）
+LowerBound: 0.05  # 预测输出下界，如果小于这个数则设置为 LowerBound，默认为 null 表示不设置下界
+UpperBound: null  # 预测输出上界，如果大于这个数则设置为 UpperBound，默认为 null 表示不设置上界
+ScaleMethod: Norm  # 特征缩放方法，可选值为 null（不进行缩放）、Norm（正态标准化）、MinMax（最小最大缩放，暂不支持）。
+AddHistoryFeatures: False  # 回归任务是否添加历史特征。如果为 True 添加时间步长个历史特征；如果为 False 添加预测时间步长个历史特征。
+
+# 数据集采样参数
+SampleGap: 2  # 采样间隔，数据类型为 int。默认为 1，表示连续采样。该参数只在训练模式上生效，在评估模式上为 1。
+Shuffle: True  # 是否打乱数据集顺序。True 表示打乱，False 表示不打乱。该参数只在训练模式上生效，在评估模式上为 False。
+TrainBatchSize: 128  # 训练批次大小，数据类型为 int。默认为 64，表示每个批次包含 64 个样本。
+EvalBatchSize: 4096  # 推理批次大小，数据类型为 int。评估模式下训练集、验证集、测试集批量大小（较大的批可以拥有更快的推理速度）。
+KFold: 3  # KFold 的折数（交叉验证的折数），应当大于等于 2。一般设置为 5 或者 10，折数越多资源消耗越大。
+
+
+# ----------------------------------------------------------------------------------------------------
+# 仅影响基学习器
+# ----------------------------------------------------------------------------------------------------
+# 数据集划分比例（如果使用集成学习，需要保证基学习器的划分是连续的）
+TrainStartPosition: 0.0  # 训练集开始位置
+TrainEndPosition: 0.7  # 训练集结束位置
+ValidStartPosition: 0.7  # 验证集开始位置
+ValidEndPosition: 0.9  # 验证集结束位置
+TestStartPosition: 0.9  # 测试集开始位置
+TestEndPosition: 1.0  # 测试集结束位置
+
+# 数据集特征参数
+FileName: VestasV52Gap60_optimization.csv  # 位于 datasets 目录下（仅在 EnsembleMethod 为 null 时起作用）
+TimeUnknown: [MaxPower, MinPower, StdDevPower, AvgRPow, Pitch, GenRPM, RotorRPM, NacelTemp,
+              GearOilTemp, GearBearTemp, GenPh1Temp, GenPh2Temp, GenPh3Temp]  # 时变未知特征
+TimeKnown: [WindSpeed, StdDevWindSpeed, WindDirAbs, WindDirRel, EnvirTemp]  # 时变已知特征
+FeatureSelectionMethod: 互信息  # 特征选择方法，可选值为 null（不进行特征选择）、互信息、F检验、卡方检验、相关系数。
+FeatureSelectionNumber: 6  # 特征选择后特征的数量（单个目标的选择数量），如果 FeatureSelectionMethod 设置为 null，则该参数无效。
+FeatureSelectionHow: outer  # 多个目标变量特征选择方式，可选值：inner（多个目标变量选择的特征取交集）、outer（多个目标变量选择的特征取并集）
+
+
+# ----------------------------------------------------------------------------------------------------
+# 仅影响集成学习器（由于涉及特征对齐，所以训练集缺少前 time_step + output_size - 1 个样本，测试集缺少后 output_size - 1 个样本）
+# ----------------------------------------------------------------------------------------------------
+ReadResultDir: .\\results\\Prediction(Base)  # 基学习器保存结果的目录，读取该目录下的模型结果
+Feature: null  # 参与集成的时序特征变量，默认为 null（使用 TimeUnknown 和 TimeKnown 所有的特征）；如果设置为 []，表示不添加任何原特征。
+Model: null  # 参与集成的模型，默认为 null（使用所有的时序模型）
+ModelSelectionMethod: F检验  # 模型选择方法。可选值为 null、统计筛选方法（互信息、F检验、卡方检验、相关系数）、指标筛选方法（在 metrics.metrics 中定义的指标）
+ModelSelectionNumber: 4  # 特征选择后特征的数量（单个目标的选择数量），如果 ModelSelectionMethod 设置为 null，则该参数无效。
+ModelSelectionHow: outer  # 多个目标变量模型选择方式，可选值：inner（多个目标变量选择的模型取交集）、outer（多个目标变量选择的模型取并集）
